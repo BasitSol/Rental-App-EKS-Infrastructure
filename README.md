@@ -70,7 +70,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Set `MONGODB_URI`, `SESSION_SECRET`, and `CLIENT_URL` in `.env` before starting the stack. The frontend build reads `REACT_APP_API_URL` at build time.
+Set `MONGODB_URI`, `SESSION_SECRET`, and `CLIENT_URL` in `.env` before starting the stack. For the live EKS deployment, `CLIENT_URL` should point at the ELB hostname (`http://ae3b0296de3e84446aba612ab8ecb1ea-817453542.us-east-1.elb.amazonaws.com`). The frontend build reads `REACT_APP_API_URL` at build time.
 
 ## Available scripts
 

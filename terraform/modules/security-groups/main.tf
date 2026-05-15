@@ -1,93 +1,93 @@
 locals {
-	name_prefix = "${var.project_name}-${var.environment}"
+  name_prefix = "${var.project_name}-${var.environment}"
 }
 
 resource "aws_security_group" "alb" {
-	name        = "${local.name_prefix}-alb-sg"
-	description = "ALB security group"
-	vpc_id      = var.vpc_id
+  name        = "${local.name_prefix}-alb-sg"
+  description = "ALB security group"
+  vpc_id      = var.vpc_id
 
-	dynamic "ingress" {
-		for_each = var.restrict_alb_to_cloudfront ? [1] : []
+  dynamic "ingress" {
+    for_each = var.restrict_alb_to_cloudfront ? [1] : []
 
-		content {
-			from_port       = 80
-			to_port         = 80
-			protocol        = "tcp"
-			prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront_origin_facing[0].id]
-		}
-	}
+    content {
+      from_port       = 80
+      to_port         = 80
+      protocol        = "tcp"
+      prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront_origin_facing[0].id]
+    }
+  }
 
-	dynamic "ingress" {
-		for_each = var.restrict_alb_to_cloudfront ? [] : [1]
+  dynamic "ingress" {
+    for_each = var.restrict_alb_to_cloudfront ? [] : [1]
 
-		content {
-			from_port   = 80
-			to_port     = 80
-			protocol    = "tcp"
-			cidr_blocks = var.allow_api_public_ingress_cidrs
-		}
-	}
+    content {
+      from_port   = 80
+      to_port     = 80
+      protocol    = "tcp"
+      cidr_blocks = var.allow_api_public_ingress_cidrs
+    }
+  }
 
-	egress {
-		from_port   = 0
-		to_port     = 0
-		protocol    = "-1"
-		cidr_blocks = ["0.0.0.0/0"]
-	}
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
-	tags = {
-		Name = "${local.name_prefix}-alb-sg"
-	}
+  tags = {
+    Name = "${local.name_prefix}-alb-sg"
+  }
 }
 
 resource "aws_security_group" "ecs_service" {
-	name        = "${local.name_prefix}-api-sg"
-	description = "ECS API task security group"
-	vpc_id      = var.vpc_id
+  name        = "${local.name_prefix}-api-sg"
+  description = "ECS API task security group"
+  vpc_id      = var.vpc_id
 
-	ingress {
-		from_port       = var.api_container_port
-		to_port         = var.api_container_port
-		protocol        = "tcp"
-		security_groups = [aws_security_group.alb.id]
-	}
+  ingress {
+    from_port       = var.api_container_port
+    to_port         = var.api_container_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
 
-	egress {
-		from_port   = 0
-		to_port     = 0
-		protocol    = "-1"
-		cidr_blocks = ["0.0.0.0/0"]
-	}
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
-	tags = {
-		Name = "${local.name_prefix}-api-sg"
-	}
+  tags = {
+    Name = "${local.name_prefix}-api-sg"
+  }
 }
 
 resource "aws_security_group" "mongo" {
-	count       = var.enable_internal_mongo ? 1 : 0
-	name        = "${local.name_prefix}-mongo-sg"
-	description = "Internal MongoDB access from ECS API tasks"
-	vpc_id      = var.vpc_id
+  count       = var.enable_internal_mongo ? 1 : 0
+  name        = "${local.name_prefix}-mongo-sg"
+  description = "Internal MongoDB access from ECS API tasks"
+  vpc_id      = var.vpc_id
 
-	ingress {
-		from_port       = 27017
-		to_port         = 27017
-		protocol        = "tcp"
-		security_groups = [var.service_security_group_id_for_mongo != "" ? var.service_security_group_id_for_mongo : aws_security_group.ecs_service.id]
-	}
+  ingress {
+    from_port       = 27017
+    to_port         = 27017
+    protocol        = "tcp"
+    security_groups = [var.service_security_group_id_for_mongo != "" ? var.service_security_group_id_for_mongo : aws_security_group.ecs_service.id]
+  }
 
-	egress {
-		from_port   = 0
-		to_port     = 0
-		protocol    = "-1"
-		cidr_blocks = ["0.0.0.0/0"]
-	}
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
-	tags = {
-		Name = "${local.name_prefix}-mongo-sg"
-	}
+  tags = {
+    Name = "${local.name_prefix}-mongo-sg"
+  }
 }
 
 # -------------------------------------------------------------------------

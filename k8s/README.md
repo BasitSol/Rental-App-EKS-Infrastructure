@@ -93,6 +93,24 @@ kubectl -n rental create secret tls rental-tls \
 kubectl apply -k k8s/overlays/production
 ```
 
+## EKS migration deploy
+
+Use this path once the EKS Terraform environment exists and the cluster is reachable:
+
+```bash
+cd terraform/environments/eks-production
+terraform init
+terraform apply
+```
+
+Then install the cluster add-ons and deploy the application:
+
+```bash
+../../../k8s/run-eks.sh
+```
+
+The EKS path uses AWS Secrets Manager to hydrate the application secret file at deploy time, then reuses the Kubernetes production overlay with the `letsencrypt-prod` ClusterIssuer and the NGINX ingress class. Keep the existing ECS stack running until the EKS rollout is healthy.
+
 ## Notes
 
 - For real production, move secrets to External Secrets (Vault/AWS Secrets Manager/GCP Secret Manager).

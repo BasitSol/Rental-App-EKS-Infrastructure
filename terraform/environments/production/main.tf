@@ -138,11 +138,11 @@ module "elk" {
   ecs_cluster_id     = module.compute.ecs_cluster_id
   aws_region         = var.aws_region
 
-  elasticsearch_sg_id = module.security_groups.elasticsearch_security_group_id
-  logstash_sg_id      = module.security_groups.logstash_security_group_id
-  kibana_sg_id        = module.security_groups.kibana_security_group_id
+  elasticsearch_sg_id     = module.security_groups.elasticsearch_security_group_id
+  logstash_sg_id          = module.security_groups.logstash_security_group_id
+  kibana_sg_id            = module.security_groups.kibana_security_group_id
   kibana_target_group_arn = module.load_balancing.kibana_target_group_arn
-  efs_sg_id           = module.security_groups.elk_efs_security_group_id
+  efs_sg_id               = module.security_groups.elk_efs_security_group_id
 
   elasticsearch_password = var.elasticsearch_password
   elk_version            = var.elk_version

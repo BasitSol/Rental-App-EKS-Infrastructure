@@ -3,10 +3,6 @@ kind: Ingress
 metadata:
   name: rental-ingress
   namespace: rental
-  annotations:
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-    nginx.ingress.kubernetes.io/limit-rps: "20"
-    nginx.ingress.kubernetes.io/limit-connections: "20"
 spec:
   ingressClassName: nginx
   rules:

@@ -528,11 +528,11 @@ resource "aws_ecs_task_definition" "kibana" {
 }
 
 resource "aws_ecs_service" "kibana" {
-  name            = "${local.name_prefix}-kibana"
-  cluster         = var.ecs_cluster_id
-  task_definition = aws_ecs_task_definition.kibana.arn
-  desired_count   = 1
-  launch_type     = "FARGATE"
+  name                              = "${local.name_prefix}-kibana"
+  cluster                           = var.ecs_cluster_id
+  task_definition                   = aws_ecs_task_definition.kibana.arn
+  desired_count                     = 1
+  launch_type                       = "FARGATE"
   health_check_grace_period_seconds = 600
 
   load_balancer {

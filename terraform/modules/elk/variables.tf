@@ -50,7 +50,7 @@ variable "aws_region" {
 }
 
 variable "elk_version" {
-  type    = string
+  type = string
   #default = "8.11.0"
   default = "7.17.18"
 }

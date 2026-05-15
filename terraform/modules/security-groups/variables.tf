@@ -1,43 +1,43 @@
 variable "project_name" {
-	type = string
+  type = string
 }
 
 variable "environment" {
-	type = string
+  type = string
 }
 
 variable "vpc_id" {
-	type = string
+  type = string
 }
 
 variable "api_container_port" {
-	type    = number
-	default = 4000
+  type    = number
+  default = 4000
 }
 
 variable "restrict_alb_to_cloudfront" {
-	type    = bool
-	default = true
+  type    = bool
+  default = true
 }
 
 variable "allow_api_public_ingress_cidrs" {
-	type    = list(string)
-	default = ["0.0.0.0/0"]
+  type    = list(string)
+  default = ["0.0.0.0/0"]
 }
 
 variable "enable_internal_mongo" {
-	type    = bool
-	default = false
+  type    = bool
+  default = false
 }
 
 variable "service_security_group_id_for_mongo" {
-	type    = string
-	default = ""
+  type    = string
+  default = ""
 }
 
 variable "tags" {
-	type    = map(string)
-	default = {}
+  type    = map(string)
+  default = {}
 }
 
 variable "elk_enabled" {

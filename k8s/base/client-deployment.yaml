@@ -34,7 +34,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: client
-          image: ghcr.io/your-org/rental-frontend:1.0.0
+          image: 664418980347.dkr.ecr.us-east-1.amazonaws.com/rental/client:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

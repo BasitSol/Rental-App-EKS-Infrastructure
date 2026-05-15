@@ -26,6 +26,7 @@ client-staging/.env
 k8s/overlays/minikube/secrets.env
 k8s/overlays/minikube/mongo-credentials.env
 k8s/overlays/production/secrets.env
+k8s/overlays/eks-production/secrets.env
 
 # Terraform state and local artifacts
 **/.terraform/
@@ -33,6 +34,8 @@ k8s/overlays/production/secrets.env
 *.tfstate.*
 *.tfplan
 *.plan
+*.tfvars
+*.tfvars.json
 crash.log
 crash.*.log
 override.tf

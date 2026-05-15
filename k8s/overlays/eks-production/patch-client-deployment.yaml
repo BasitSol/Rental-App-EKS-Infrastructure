@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-deployment
+  namespace: rental
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: client
+          imagePullPolicy: Always
