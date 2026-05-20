@@ -153,3 +153,21 @@ variable "enable_k8s_resources" {
   type        = bool
   default     = false
 }
+
+variable "github_repo" {
+  description = "GitHub repository allowed to assume the CI role (owner/repo)."
+  type        = string
+  default     = "BasitSol/RentalApp-DevOps"
+}
+
+variable "github_branch" {
+  description = "GitHub branch allowed to assume the CI role."
+  type        = string
+  default     = "main"
+}
+
+variable "github_actions_role_name" {
+  description = "IAM role name for GitHub Actions OIDC."
+  type        = string
+  default     = "rentalapp-gha-deploy"
+}

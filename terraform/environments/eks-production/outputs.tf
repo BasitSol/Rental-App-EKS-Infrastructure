@@ -68,3 +68,8 @@ output "jwt_secret_name" {
   description = "Secrets Manager name for the JWT secret."
   value       = module.app_secrets.jwt_secret_name
 }
+
+output "github_actions_role_arn" {
+  description = "IAM role ARN for GitHub Actions OIDC."
+  value       = aws_iam_role.github_actions.arn
+}
