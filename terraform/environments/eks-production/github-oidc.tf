@@ -43,6 +43,7 @@ data "aws_iam_policy_document" "github_actions_iam_read" {
       "iam:GetOpenIDConnectProvider",
       "iam:GetPolicy",
       "iam:GetPolicyVersion",
+      "iam:GetRolePolicy",
       "iam:GetRole",
       "iam:ListAttachedRolePolicies",
       "iam:ListRolePolicies",
