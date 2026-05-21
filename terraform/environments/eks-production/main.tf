@@ -43,3 +43,37 @@ module "app_secrets" {
   jwt_secret     = var.jwt_secret
   tags           = var.tags
 }
+
+locals {
+  github_owner = split("/", var.github_repo)[0]
+  github_repo  = split("/", var.github_repo)[1]
+}
+
+module "github_runner" {
+  source = "../../modules/github-runner"
+  count  = var.enable_github_runner ? 1 : 0
+
+  project_name = var.project_name
+  environment  = var.environment
+  aws_region   = var.aws_region
+  tags         = var.tags
+
+  vpc_id     = module.networking.vpc_id
+  vpc_cidr   = module.networking.vpc_cidr_block
+  subnet_ids = module.networking.private_subnet_ids
+
+  github_owner                 = local.github_owner
+  github_repo                  = local.github_repo
+  github_runner_group          = var.github_runner_group
+  github_runner_labels         = var.github_runner_labels
+  github_app_secret_arn        = var.github_runner_app_secret_arn
+  github_app_secret_kms_key_arn = var.github_runner_app_kms_key_arn
+
+  runner_version  = var.github_runner_version
+  instance_type   = var.github_runner_instance_type
+  min_size        = var.github_runner_min_size
+  max_size        = var.github_runner_max_size
+  desired_capacity = var.github_runner_desired_capacity
+  log_retention_days = var.github_runner_log_retention_days
+  enable_ephemeral   = var.github_runner_ephemeral
+}

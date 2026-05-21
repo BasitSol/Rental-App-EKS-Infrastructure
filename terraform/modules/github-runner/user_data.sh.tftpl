@@ -1,0 +1,99 @@
+#!/bin/bash
+set -euo pipefail
+
+LOG_FILE="/var/log/github-runner.log"
+
+install_packages() {
+  if command -v dnf >/dev/null 2>&1; then
+    dnf -y update
+    dnf -y install curl jq git docker awscli
+  elif command -v yum >/dev/null 2>&1; then
+    yum -y update
+    yum -y install curl jq git docker awscli
+  else
+    echo "No supported package manager found" | tee -a "$LOG_FILE"
+    exit 1
+  fi
+}
+
+install_packages
+systemctl enable --now docker
+usermod -aG docker ec2-user
+
+if command -v dnf >/dev/null 2>&1; then
+  dnf -y install amazon-cloudwatch-agent
+elif command -v yum >/dev/null 2>&1; then
+  yum -y install amazon-cloudwatch-agent
+fi
+
+mkdir -p /opt/actions-runner
+cd /opt/actions-runner
+
+curl -L -o actions-runner.tar.gz "https://github.com/actions/runner/releases/download/v${runner_version}/actions-runner-linux-x64-${runner_version}.tar.gz"
+tar xzf actions-runner.tar.gz
+chown -R ec2-user:ec2-user /opt/actions-runner
+
+secret_json=$(aws secretsmanager get-secret-value --secret-id "${github_app_secret_arn}" --query SecretString --output text --region "${aws_region}")
+app_id=$(echo "$secret_json" | jq -r '.app_id')
+installation_id=$(echo "$secret_json" | jq -r '.installation_id')
+private_key=$(echo "$secret_json" | jq -r '.private_key_pem')
+
+printf "%s" "$private_key" > /opt/actions-runner/private-key.pem
+chmod 600 /opt/actions-runner/private-key.pem
+
+b64url() {
+  openssl base64 -e -A | tr '+/' '-_' | tr -d '='
+}
+
+now=$(date +%s)
+iat=$((now - 60))
+exp=$((now + 540))
+
+header='{"alg":"RS256","typ":"JWT"}'
+payload=$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' "$iat" "$exp" "$app_id")
+
+header_b64=$(printf '%s' "$header" | b64url)
+payload_b64=$(printf '%s' "$payload" | b64url)
+unsigned="$header_b64.$payload_b64"
+signature=$(printf '%s' "$unsigned" | openssl dgst -sha256 -sign /opt/actions-runner/private-key.pem | b64url)
+
+gh_jwt="$unsigned.$signature"
+
+install_token=$(curl -s -X POST \
+  -H "Authorization: Bearer $gh_jwt" \
+  -H "Accept: application/vnd.github+json" \
+  "https://api.github.com/app/installations/$installation_id/access_tokens" | jq -r '.token')
+
+reg_token=$(curl -s -X POST \
+  -H "Authorization: token $install_token" \
+  -H "Accept: application/vnd.github+json" \
+  "https://api.github.com/repos/${github_owner}/${github_repo}/actions/runners/registration-token" | jq -r '.token')
+
+labels_csv="${runner_labels_csv}"
+runner_group="${runner_group}"
+
+su - ec2-user -c "/opt/actions-runner/config.sh --url https://github.com/${github_owner}/${github_repo} --token $reg_token --labels $labels_csv --runnergroup $runner_group --unattended ${ephemeral_flag}"
+
+cat >/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'EOF'
+{
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/github-runner.log",
+            "log_group_name": "${log_group_name}",
+            "log_stream_name": "{instance_id}",
+            "timestamp_format": "%Y-%m-%dT%H:%M:%S"
+          }
+        ]
+      }
+    }
+  }
+}
+EOF
+
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+
+su - ec2-user -c "/opt/actions-runner/run.sh --once" 2>&1 | tee -a "$LOG_FILE"
+shutdown -h now

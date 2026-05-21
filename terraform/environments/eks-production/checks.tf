@@ -18,3 +18,10 @@ check "cluster_endpoint_access" {
     error_message = "Provide at least one non-public CIDR for EKS API public access. Do not leave the endpoint open to 0.0.0.0/0."
   }
 }
+
+check "github_runner_secret" {
+  assert {
+    condition     = !var.enable_github_runner || var.github_runner_app_secret_arn != ""
+    error_message = "Set github_runner_app_secret_arn when enable_github_runner is true."
+  }
+}

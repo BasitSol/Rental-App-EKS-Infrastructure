@@ -171,3 +171,75 @@ variable "github_actions_role_name" {
   type        = string
   default     = "rentalapp-gha-deploy"
 }
+
+variable "enable_github_runner" {
+  description = "Enable EC2 self-hosted GitHub Actions runners in the VPC."
+  type        = bool
+  default     = false
+}
+
+variable "github_runner_app_secret_arn" {
+  description = "Secrets Manager ARN containing GitHub App credentials for runner registration."
+  type        = string
+  default     = ""
+}
+
+variable "github_runner_app_kms_key_arn" {
+  description = "Optional KMS key ARN for decrypting the GitHub App secret."
+  type        = string
+  default     = ""
+}
+
+variable "github_runner_labels" {
+  description = "Labels for self-hosted runners."
+  type        = list(string)
+  default     = ["eks-runner"]
+}
+
+variable "github_runner_group" {
+  description = "GitHub runner group name."
+  type        = string
+  default     = "Default"
+}
+
+variable "github_runner_version" {
+  description = "GitHub Actions runner version."
+  type        = string
+  default     = "2.316.0"
+}
+
+variable "github_runner_instance_type" {
+  description = "Instance type for runner hosts."
+  type        = string
+  default     = "t3.medium"
+}
+
+variable "github_runner_min_size" {
+  description = "Minimum number of runners in the ASG."
+  type        = number
+  default     = 1
+}
+
+variable "github_runner_max_size" {
+  description = "Maximum number of runners in the ASG."
+  type        = number
+  default     = 3
+}
+
+variable "github_runner_desired_capacity" {
+  description = "Desired number of runners in the ASG."
+  type        = number
+  default     = 1
+}
+
+variable "github_runner_log_retention_days" {
+  description = "CloudWatch log retention for runner logs."
+  type        = number
+  default     = 14
+}
+
+variable "github_runner_ephemeral" {
+  description = "Whether runners should be ephemeral per job."
+  type        = bool
+  default     = true
+}
