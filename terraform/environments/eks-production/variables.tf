@@ -61,7 +61,7 @@ variable "cluster_version" {
 variable "cluster_endpoint_public_access_cidrs" {
   description = "CIDRs allowed to reach the EKS public API endpoint. Narrow this before production cutover."
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = ["59.103.217.174/32"]
 }
 
 variable "node_instance_types" {
