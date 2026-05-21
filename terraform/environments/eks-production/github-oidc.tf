@@ -36,3 +36,23 @@ resource "aws_iam_role_policy_attachment" "github_actions_poweruser" {
   role       = aws_iam_role.github_actions.name
   policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
 }
+
+data "aws_iam_policy_document" "github_actions_iam_read" {
+  statement {
+    actions = [
+      "iam:GetOpenIDConnectProvider",
+      "iam:GetPolicy",
+      "iam:GetPolicyVersion",
+      "iam:GetRole",
+      "iam:ListAttachedRolePolicies",
+      "iam:ListRolePolicies",
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "github_actions_iam_read" {
+  name   = "${var.github_actions_role_name}-iam-read"
+  role   = aws_iam_role.github_actions.name
+  policy = data.aws_iam_policy_document.github_actions_iam_read.json
+}

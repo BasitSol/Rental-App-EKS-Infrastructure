@@ -157,7 +157,7 @@ variable "enable_k8s_resources" {
 variable "github_repo" {
   description = "GitHub repository allowed to assume the CI role (owner/repo)."
   type        = string
-  default     = "BasitSol/RentalApp-DevOps"
+  default     = "BasitSol/Rental-App-EKS-Infrastructure"
 }
 
 variable "github_branch" {
