@@ -34,7 +34,7 @@ tar xzf actions-runner.tar.gz
 chown -R ec2-user:ec2-user /opt/actions-runner
 
 if command -v dnf >/dev/null 2>&1; then
-  dnf -y install \
+  dnf -y install --allowerasing \
     icu \
     libicu \
     libcurl \
