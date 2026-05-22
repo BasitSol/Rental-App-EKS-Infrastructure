@@ -65,27 +65,27 @@ variable "cluster_endpoint_public_access_cidrs" {
 }
 
 variable "node_instance_types" {
-  description = "Instance types for the managed node group."
+  description = "Instance types for the managed node group. t3.micro is used because the AWS account is restricted to Free Tier instances. Switch to t3.medium or larger when the restriction is lifted."
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.micro"]
 }
 
 variable "node_min_size" {
-  description = "Minimum node count for the managed node group."
+  description = "Minimum node count for the managed node group. t3.micro nodes hold ~4 pods each; bumped to 3 so EKS system pods + the rental workloads fit."
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "node_max_size" {
   description = "Maximum node count for the managed node group."
   type        = number
-  default     = 4
+  default     = 5
 }
 
 variable "node_desired_size" {
   description = "Desired node count for the managed node group."
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "node_disk_size" {
