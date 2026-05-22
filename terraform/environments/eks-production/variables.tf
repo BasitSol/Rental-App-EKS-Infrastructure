@@ -205,7 +205,7 @@ variable "github_runner_group" {
 variable "github_runner_version" {
   description = "GitHub Actions runner version."
   type        = string
-  default     = "2.316.0"
+  default     = "2.334.0"
 }
 
 variable "github_runner_instance_type" {

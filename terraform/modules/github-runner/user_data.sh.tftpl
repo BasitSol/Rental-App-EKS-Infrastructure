@@ -107,5 +107,5 @@ EOF
 
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
 
-su - ec2-user -c "/opt/actions-runner/run.sh --once" 2>&1 | tee -a "$LOG_FILE"
+su - ec2-user -c "/opt/actions-runner/run.sh" 2>&1 | tee -a "$LOG_FILE"
 shutdown -h now
