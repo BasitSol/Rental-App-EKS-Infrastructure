@@ -2,6 +2,12 @@ name: Deploy EKS
 
 on:
   workflow_dispatch:
+    inputs:
+      auto_approve:
+        description: "Auto-approve Terraform apply"
+        required: true
+        default: false
+        type: boolean
   push:
     branches:
       - main
@@ -10,10 +16,12 @@ env:
   AWS_REGION: us-east-1
   ECR_REPO_API: rental/api
   ECR_REPO_CLIENT: rental/client
+  TF_VAR_enable_k8s_resources: "true"
 
 jobs:
-  build-and-deploy:
-    runs-on: [self-hosted, linux, x64, eks-runner]
+  build-plan-apply:
+    name: Build, Plan & Deploy
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
@@ -32,32 +40,34 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push API image
-        env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t "$REGISTRY/$ECR_REPO_API:$IMAGE_TAG" ./api-staging
-          docker push "$REGISTRY/$ECR_REPO_API:$IMAGE_TAG"
+        uses: docker/build-push-action@v6
+        with:
+          context: ./api-staging
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO_API }}:${{ github.sha }}
+          cache-from: type=gha,scope=api-staging
+          cache-to: type=gha,mode=max,scope=api-staging
 
       - name: Build and push client image
-        env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t "$REGISTRY/$ECR_REPO_CLIENT:$IMAGE_TAG" ./client-staging
-          docker push "$REGISTRY/$ECR_REPO_CLIENT:$IMAGE_TAG"
+        uses: docker/build-push-action@v6
+        with:
+          context: ./client-staging
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO_CLIENT }}:${{ github.sha }}
+          cache-from: type=gha,scope=client-staging
+          cache-to: type=gha,mode=max,scope=client-staging
 
       - name: Resolve image digests
         id: digests
-        env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
         run: |
-          API_DIGEST=$(aws ecr describe-images --repository-name "$ECR_REPO_API" --image-ids imageTag="$IMAGE_TAG" --query 'imageDetails[0].imageDigest' --output text)
-          CLIENT_DIGEST=$(aws ecr describe-images --repository-name "$ECR_REPO_CLIENT" --image-ids imageTag="$IMAGE_TAG" --query 'imageDetails[0].imageDigest' --output text)
-          echo "api_image=$REGISTRY/$ECR_REPO_API@$API_DIGEST" >> "$GITHUB_OUTPUT"
-          echo "client_image=$REGISTRY/$ECR_REPO_CLIENT@$CLIENT_DIGEST" >> "$GITHUB_OUTPUT"
+          API_DIGEST=$(aws ecr describe-images --repository-name "$ECR_REPO_API" --image-ids imageTag="$GITHUB_SHA" --query 'imageDetails[0].imageDigest' --output text)
+          CLIENT_DIGEST=$(aws ecr describe-images --repository-name "$ECR_REPO_CLIENT" --image-ids imageTag="$GITHUB_SHA" --query 'imageDetails[0].imageDigest' --output text)
+          echo "api_image=${{ steps.login-ecr.outputs.registry }}/$ECR_REPO_API@$API_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "client_image=${{ steps.login-ecr.outputs.registry }}/$ECR_REPO_CLIENT@$CLIENT_DIGEST" >> "$GITHUB_OUTPUT"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -67,13 +77,40 @@ jobs:
       - name: Terraform init
         run: terraform -chdir=terraform/environments/eks-production init
 
-      - name: Terraform apply (infra + k8s)
+      - name: Terraform plan
+        id: plan
         env:
           TF_VAR_mongodb_uri: ${{ secrets.MONGODB_URI }}
           TF_VAR_session_secret: ${{ secrets.SESSION_SECRET }}
           TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
           TF_VAR_api_image: ${{ steps.digests.outputs.api_image }}
           TF_VAR_client_image: ${{ steps.digests.outputs.client_image }}
-          TF_VAR_enable_k8s_resources: "true"
+        run: terraform -chdir=terraform/environments/eks-production plan -no-color -out=tfplan
+
+      - name: Show Terraform plan
+        if: steps.plan.outcome == 'success'
+        run: terraform -chdir=terraform/environments/eks-production show -no-color tfplan
+
+      - name: Terraform apply
+        if: github.event_name == 'push' || inputs.auto_approve
+        env:
+          TF_VAR_mongodb_uri: ${{ secrets.MONGODB_URI }}
+          TF_VAR_session_secret: ${{ secrets.SESSION_SECRET }}
+          TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+          TF_VAR_api_image: ${{ steps.digests.outputs.api_image }}
+          TF_VAR_client_image: ${{ steps.digests.outputs.client_image }}
+        run: terraform -chdir=terraform/environments/eks-production apply -auto-approve tfplan
+
+      - name: Setup kubectl
+        if: github.event_name == 'push' || inputs.auto_approve
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.30.0'
+
+      - name: Verify deployment
+        if: github.event_name == 'push' || inputs.auto_approve
         run: |
-          terraform -chdir=terraform/environments/eks-production apply -auto-approve
+          aws eks update-kubeconfig --name rentalapp-eks-prod-eks --region $AWS_REGION
+          kubectl -n rental rollout status deploy/api-deployment --timeout=300s
+          kubectl -n rental rollout status deploy/client-deployment --timeout=300s
+          echo "Deployment verified successfully"

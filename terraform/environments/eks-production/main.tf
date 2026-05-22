@@ -77,3 +77,21 @@ module "github_runner" {
   log_retention_days = var.github_runner_log_retention_days
   enable_ephemeral   = var.github_runner_ephemeral
 }
+
+# Grant the GitHub Actions CI/CD role access to the EKS cluster API
+resource "aws_eks_access_entry" "github_actions" {
+  cluster_name  = module.eks_cluster.cluster_name
+  principal_arn = aws_iam_role.github_actions.arn
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "github_actions_admin" {
+  cluster_name  = module.eks_cluster.cluster_name
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+  principal_arn = aws_iam_role.github_actions.arn
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.github_actions]
+}

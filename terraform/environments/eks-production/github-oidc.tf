@@ -1,3 +1,13 @@
+data "tls_certificate" "github" {
+  url = "https://token.actions.githubusercontent.com"
+}
+
+resource "aws_iam_openid_connect_provider" "github" {
+  url             = "https://token.actions.githubusercontent.com"
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = [data.tls_certificate.github.certificates[0].sha1_fingerprint]
+}
+
 data "aws_iam_policy_document" "github_actions_assume_role" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
@@ -21,39 +31,239 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
   }
 }
 
-resource "aws_iam_openid_connect_provider" "github" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
-}
-
 resource "aws_iam_role" "github_actions" {
   name               = var.github_actions_role_name
   assume_role_policy = data.aws_iam_policy_document.github_actions_assume_role.json
 }
 
-resource "aws_iam_role_policy_attachment" "github_actions_poweruser" {
-  role       = aws_iam_role.github_actions.name
-  policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
-}
-
-data "aws_iam_policy_document" "github_actions_iam_read" {
+data "aws_iam_policy_document" "github_actions_deploy" {
   statement {
+    sid    = "ECRAccess"
+    effect = "Allow"
     actions = [
-      "iam:GetOpenIDConnectProvider",
-      "iam:GetPolicy",
-      "iam:GetPolicyVersion",
-      "iam:GetRolePolicy",
+      "ecr:GetAuthorizationToken",
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload",
+      "ecr:PutImage",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "EKSAccess"
+    effect = "Allow"
+    actions = [
+      "eks:DescribeCluster",
+      "eks:ListClusters",
+      "eks:UpdateClusterConfig",
+      "eks:CreateCluster",
+      "eks:DeleteCluster",
+      "eks:TagResource",
+      "eks:UntagResource",
+      "eks:ListTagsForResource",
+      "eks:CreateNodegroup",
+      "eks:DeleteNodegroup",
+      "eks:DescribeNodegroup",
+      "eks:UpdateNodegroupConfig",
+      "eks:CreateAddon",
+      "eks:DeleteAddon",
+      "eks:DescribeAddon",
+      "eks:UpdateAddon",
+      "eks:CreateAccessEntry",
+      "eks:DeleteAccessEntry",
+      "eks:DescribeAccessEntry",
+      "eks:AssociateAccessPolicy",
+      "eks:DisassociateAccessPolicy",
+      "eks:ListAccessPolicies",
+      "eks:ListAssociatedAccessPolicies",
+      "eks:ListAccessEntries",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "EC2Networking"
+    effect = "Allow"
+    actions = [
+      "ec2:*Vpc*",
+      "ec2:*Subnet*",
+      "ec2:*InternetGateway*",
+      "ec2:*NatGateway*",
+      "ec2:*RouteTable*",
+      "ec2:*Route*",
+      "ec2:*SecurityGroup*",
+      "ec2:*Address*",
+      "ec2:Describe*",
+      "ec2:CreateTags",
+      "ec2:DeleteTags",
+      "ec2:AllocateAddress",
+      "ec2:ReleaseAddress",
+      "ec2:CreateNetworkInterface",
+      "ec2:DeleteNetworkInterface",
+      "ec2:AttachNetworkInterface",
+      "ec2:DetachNetworkInterface",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "IAMLimited"
+    effect = "Allow"
+    actions = [
+      "iam:CreateRole",
+      "iam:DeleteRole",
       "iam:GetRole",
-      "iam:ListAttachedRolePolicies",
+      "iam:ListRoles",
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
+      "iam:GetRolePolicy",
       "iam:ListRolePolicies",
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
+      "iam:CreatePolicy",
+      "iam:DeletePolicy",
+      "iam:GetPolicy",
+      "iam:ListPolicies",
+      "iam:GetPolicyVersion",
+      "iam:ListPolicyVersions",
+      "iam:CreatePolicyVersion",
+      "iam:DeletePolicyVersion",
+      "iam:SetDefaultPolicyVersion",
+      "iam:CreateInstanceProfile",
+      "iam:DeleteInstanceProfile",
+      "iam:GetInstanceProfile",
+      "iam:AddRoleToInstanceProfile",
+      "iam:RemoveRoleFromInstanceProfile",
+      "iam:ListInstanceProfiles",
+      "iam:CreateOpenIDConnectProvider",
+      "iam:DeleteOpenIDConnectProvider",
+      "iam:GetOpenIDConnectProvider",
+      "iam:ListOpenIDConnectProviders",
+      "iam:UpdateAssumeRolePolicy",
+      "iam:PassRole",
+      "iam:GetServerCertificate",
+      "iam:ListServerCertificates",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "SecretsManager"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:CreateSecret",
+      "secretsmanager:DeleteSecret",
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:PutSecretValue",
+      "secretsmanager:UpdateSecret",
+      "secretsmanager:RestoreSecret",
+      "secretsmanager:ListSecretVersionIds",
+      "secretsmanager:TagResource",
+      "secretsmanager:UntagResource",
+      "secretsmanager:ListSecrets",
+    ]
+    resources = ["arn:aws:secretsmanager:*:*:secret:/rentalapp/*"]
+  }
+
+  statement {
+    sid    = "StateBackend"
+    effect = "Allow"
+    actions = [
+      "s3:ListBucket",
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
+    ]
+    resources = [
+      "arn:aws:s3:::rentalapp-terraform-state-eks-prod",
+      "arn:aws:s3:::rentalapp-terraform-state-eks-prod/*",
+    ]
+  }
+
+  statement {
+    sid    = "DynamoDBLocks"
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:DescribeTable",
+    ]
+    resources = ["arn:aws:dynamodb:*:*:table/rentalapp-terraform-locks"]
+  }
+
+  statement {
+    sid    = "CloudWatchLogs"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogGroup",
+      "logs:DeleteLogGroup",
+      "logs:DescribeLogGroups",
+      "logs:ListTagsLogGroup",
+      "logs:TagLogGroup",
+      "logs:UntagLogGroup",
+      "logs:CreateLogStream",
+      "logs:DeleteLogStream",
+      "logs:DescribeLogStreams",
+      "logs:PutLogEvents",
+    ]
+    resources = ["arn:aws:logs:*:*:log-group:/aws/eks/rentalapp*"]
+  }
+
+  statement {
+    sid    = "ELB"
+    effect = "Allow"
+    actions = [
+      "elasticloadbalancing:Describe*",
+      "elasticloadbalancing:CreateLoadBalancer",
+      "elasticloadbalancing:DeleteLoadBalancer",
+      "elasticloadbalancing:ModifyLoadBalancerAttributes",
+      "elasticloadbalancing:SetSecurityGroups",
+      "elasticloadbalancing:SetSubnets",
+      "elasticloadbalancing:CreateTargetGroup",
+      "elasticloadbalancing:DeleteTargetGroup",
+      "elasticloadbalancing:ModifyTargetGroup",
+      "elasticloadbalancing:RegisterTargets",
+      "elasticloadbalancing:DeregisterTargets",
+      "elasticloadbalancing:CreateListener",
+      "elasticloadbalancing:DeleteListener",
+      "elasticloadbalancing:ModifyListener",
+      "elasticloadbalancing:AddTags",
+      "elasticloadbalancing:RemoveTags",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "DenyDangerous"
+    effect = "Deny"
+    actions = [
+      "iam:CreateUser",
+      "iam:DeleteUser",
+      "iam:CreateAccessKey",
+      "iam:UpdateAccessKey",
+      "iam:DeleteAccountPasswordPolicy",
+      "account:*",
+      "billing:*",
+      "payments:*",
+      "tax:*",
+      "organizations:*",
     ]
     resources = ["*"]
   }
 }
 
-resource "aws_iam_role_policy" "github_actions_iam_read" {
-  name   = "${var.github_actions_role_name}-iam-read"
-  role   = aws_iam_role.github_actions.name
-  policy = data.aws_iam_policy_document.github_actions_iam_read.json
+resource "aws_iam_policy" "github_actions_deploy" {
+  name   = "${var.github_actions_role_name}-deploy"
+  policy = data.aws_iam_policy_document.github_actions_deploy.json
+}
+
+resource "aws_iam_role_policy_attachment" "github_actions_deploy" {
+  role       = aws_iam_role.github_actions.name
+  policy_arn = aws_iam_policy.github_actions_deploy.arn
 }
