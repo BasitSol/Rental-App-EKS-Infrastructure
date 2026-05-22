@@ -6,7 +6,7 @@ LOG_FILE="/var/log/github-runner.log"
 install_packages() {
   if command -v dnf >/dev/null 2>&1; then
     dnf -y update
-    dnf -y install curl jq git docker awscli
+    dnf -y install --allowerasing curl jq git docker awscli
   elif command -v yum >/dev/null 2>&1; then
     yum -y update
     yum -y install curl jq git docker awscli
