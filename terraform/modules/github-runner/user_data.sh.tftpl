@@ -33,6 +33,8 @@ curl -L -o actions-runner.tar.gz "https://github.com/actions/runner/releases/dow
 tar xzf actions-runner.tar.gz
 chown -R ec2-user:ec2-user /opt/actions-runner
 
+/opt/actions-runner/bin/installdependencies.sh
+
 secret_json=$(aws secretsmanager get-secret-value --secret-id "${github_app_secret_arn}" --query SecretString --output text --region "${aws_region}")
 app_id=$(echo "$secret_json" | jq -r '.app_id')
 installation_id=$(echo "$secret_json" | jq -r '.installation_id')
