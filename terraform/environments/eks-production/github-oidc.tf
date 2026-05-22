@@ -130,6 +130,7 @@ data "aws_iam_policy_document" "github_actions_deploy" {
       "iam:DeleteRolePolicy",
       "iam:GetRolePolicy",
       "iam:ListRolePolicies",
+      "iam:ListAttachedRolePolicies",
       "iam:AttachRolePolicy",
       "iam:DetachRolePolicy",
       "iam:CreatePolicy",
@@ -174,6 +175,9 @@ data "aws_iam_policy_document" "github_actions_deploy" {
       "secretsmanager:TagResource",
       "secretsmanager:UntagResource",
       "secretsmanager:ListSecrets",
+      "secretsmanager:GetResourcePolicy",
+      "secretsmanager:PutResourcePolicy",
+      "secretsmanager:DeleteResourcePolicy",
     ]
     resources = ["arn:aws:secretsmanager:*:*:secret:/rentalapp/*"]
   }
@@ -206,21 +210,39 @@ data "aws_iam_policy_document" "github_actions_deploy" {
   }
 
   statement {
-    sid    = "CloudWatchLogs"
+    sid    = "CloudWatchLogsList"
+    effect = "Allow"
+    actions = [
+      "logs:DescribeLogGroups",
+      "logs:DescribeLogStreams",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CloudWatchLogsWrite"
     effect = "Allow"
     actions = [
       "logs:CreateLogGroup",
       "logs:DeleteLogGroup",
-      "logs:DescribeLogGroups",
       "logs:ListTagsLogGroup",
       "logs:TagLogGroup",
       "logs:UntagLogGroup",
       "logs:CreateLogStream",
       "logs:DeleteLogStream",
-      "logs:DescribeLogStreams",
       "logs:PutLogEvents",
+      "logs:PutRetentionPolicy",
+      "logs:DeleteRetentionPolicy",
+      "logs:ListTagsForResource",
+      "logs:TagResource",
+      "logs:UntagResource",
     ]
-    resources = ["arn:aws:logs:*:*:log-group:/aws/eks/rentalapp*"]
+    resources = [
+      "arn:aws:logs:*:*:log-group:/aws/eks/rentalapp*",
+      "arn:aws:logs:*:*:log-group:/aws/eks/rentalapp*:*",
+      "arn:aws:logs:*:*:log-group:/aws/github-runner/rentalapp*",
+      "arn:aws:logs:*:*:log-group:/aws/github-runner/rentalapp*:*",
+    ]
   }
 
   statement {
