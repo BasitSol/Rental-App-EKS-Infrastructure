@@ -94,6 +94,29 @@ data "aws_iam_policy_document" "github_actions_deploy" {
   }
 
   statement {
+    sid    = "AutoScaling"
+    effect = "Allow"
+    actions = [
+      "autoscaling:Describe*",
+      "autoscaling:CreateAutoScalingGroup",
+      "autoscaling:UpdateAutoScalingGroup",
+      "autoscaling:DeleteAutoScalingGroup",
+      "autoscaling:CreateOrUpdateTags",
+      "autoscaling:DeleteTags",
+      "autoscaling:SetDesiredCapacity",
+      "autoscaling:SuspendProcesses",
+      "autoscaling:ResumeProcesses",
+      "autoscaling:AttachInstances",
+      "autoscaling:DetachInstances",
+      "autoscaling:EnableMetricsCollection",
+      "autoscaling:DisableMetricsCollection",
+      "autoscaling:PutScalingPolicy",
+      "autoscaling:DeletePolicy",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
     sid    = "EC2Networking"
     effect = "Allow"
     actions = [

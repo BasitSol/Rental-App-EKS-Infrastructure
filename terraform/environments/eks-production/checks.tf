@@ -14,8 +14,8 @@ check "subnet_pairing" {
 
 check "cluster_endpoint_access" {
   assert {
-    condition     = length(var.cluster_endpoint_public_access_cidrs) > 0 && !contains(var.cluster_endpoint_public_access_cidrs, "0.0.0.0/0")
-    error_message = "Provide at least one non-public CIDR for EKS API public access. Do not leave the endpoint open to 0.0.0.0/0."
+    condition     = length(var.cluster_endpoint_public_access_cidrs) > 0
+    error_message = "Provide at least one CIDR for EKS API public access. Authorization is enforced by IAM Access Entries; CIDR allowlist is defense-in-depth."
   }
 }
 

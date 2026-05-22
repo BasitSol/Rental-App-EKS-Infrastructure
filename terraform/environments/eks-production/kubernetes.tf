@@ -8,23 +8,60 @@ data "aws_eks_cluster" "main" {
   depends_on = [module.eks_cluster]
 }
 
-data "aws_eks_cluster_auth" "main" {
-  count      = local.k8s_enabled ? 1 : 0
-  name       = module.eks_cluster.cluster_name
-  depends_on = [module.eks_cluster]
-}
-
 provider "kubernetes" {
   host                   = local.k8s_enabled ? data.aws_eks_cluster.main[0].endpoint : "https://0.0.0.0"
   cluster_ca_certificate = local.k8s_enabled ? base64decode(data.aws_eks_cluster.main[0].certificate_authority[0].data) : ""
-  token                  = local.k8s_enabled ? data.aws_eks_cluster_auth.main[0].token : ""
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args = [
+      "eks",
+      "get-token",
+      "--cluster-name",
+      local.k8s_enabled ? data.aws_eks_cluster.main[0].name : "placeholder",
+      "--region",
+      var.aws_region,
+    ]
+  }
 }
 
 provider "helm" {
   kubernetes {
     host                   = local.k8s_enabled ? data.aws_eks_cluster.main[0].endpoint : "https://0.0.0.0"
     cluster_ca_certificate = local.k8s_enabled ? base64decode(data.aws_eks_cluster.main[0].certificate_authority[0].data) : ""
-    token                  = local.k8s_enabled ? data.aws_eks_cluster_auth.main[0].token : ""
+
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args = [
+        "eks",
+        "get-token",
+        "--cluster-name",
+        local.k8s_enabled ? data.aws_eks_cluster.main[0].name : "placeholder",
+        "--region",
+        var.aws_region,
+      ]
+    }
+  }
+}
+
+provider "kubectl" {
+  host                   = local.k8s_enabled ? data.aws_eks_cluster.main[0].endpoint : "https://0.0.0.0"
+  cluster_ca_certificate = local.k8s_enabled ? base64decode(data.aws_eks_cluster.main[0].certificate_authority[0].data) : ""
+  load_config_file       = false
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args = [
+      "eks",
+      "get-token",
+      "--cluster-name",
+      local.k8s_enabled ? data.aws_eks_cluster.main[0].name : "placeholder",
+      "--region",
+      var.aws_region,
+    ]
   }
 }
 
@@ -35,6 +72,10 @@ resource "helm_release" "ingress_nginx" {
   chart            = "ingress-nginx"
   namespace        = "ingress-nginx"
   create_namespace = true
+  atomic           = true
+  cleanup_on_fail  = true
+  wait             = true
+  timeout          = 600
 
   set {
     name  = "controller.replicaCount"
@@ -54,6 +95,10 @@ resource "helm_release" "cert_manager" {
   chart            = "cert-manager"
   namespace        = "cert-manager"
   create_namespace = true
+  atomic           = true
+  cleanup_on_fail  = true
+  wait             = true
+  timeout          = 600
 
   set {
     name  = "crds.enabled"
@@ -62,11 +107,15 @@ resource "helm_release" "cert_manager" {
 }
 
 resource "helm_release" "metrics_server" {
-  count      = local.k8s_enabled ? 1 : 0
-  name       = "metrics-server"
-  repository = "https://kubernetes-sigs.github.io/metrics-server/"
-  chart      = "metrics-server"
-  namespace  = "kube-system"
+  count           = local.k8s_enabled ? 1 : 0
+  name            = "metrics-server"
+  repository      = "https://kubernetes-sigs.github.io/metrics-server/"
+  chart           = "metrics-server"
+  namespace       = "kube-system"
+  atomic          = true
+  cleanup_on_fail = true
+  wait            = true
+  timeout         = 600
 
   set {
     name  = "args[0]"
@@ -81,6 +130,10 @@ resource "helm_release" "external_secrets" {
   chart            = "external-secrets"
   namespace        = "external-secrets"
   create_namespace = true
+  atomic           = true
+  cleanup_on_fail  = true
+  wait             = true
+  timeout          = 600
 
   set {
     name  = "installCRDs"
@@ -347,7 +400,7 @@ resource "kubernetes_deployment" "api" {
   depends_on = [
     kubernetes_service_account.rental_api,
     kubernetes_config_map.rental_api_config,
-    kubernetes_manifest.external_secrets,
+    kubectl_manifest.external_secrets,
   ]
 }
 
@@ -948,9 +1001,9 @@ resource "kubernetes_network_policy" "allow_api_egress_external" {
   }
 }
 
-resource "kubernetes_manifest" "cluster_issuer" {
+resource "kubectl_manifest" "cluster_issuer" {
   count = local.k8s_enabled ? 1 : 0
-  manifest = {
+  yaml_body = yamlencode({
     apiVersion = "cert-manager.io/v1"
     kind       = "ClusterIssuer"
     metadata = {
@@ -974,14 +1027,14 @@ resource "kubernetes_manifest" "cluster_issuer" {
         ]
       }
     }
-  }
+  })
 
   depends_on = [helm_release.cert_manager]
 }
 
-resource "kubernetes_manifest" "secret_store" {
+resource "kubectl_manifest" "secret_store" {
   count = local.k8s_enabled ? 1 : 0
-  manifest = {
+  yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1beta1"
     kind       = "SecretStore"
     metadata = {
@@ -1003,7 +1056,7 @@ resource "kubernetes_manifest" "secret_store" {
         }
       }
     }
-  }
+  })
 
   depends_on = [
     helm_release.external_secrets,
@@ -1011,9 +1064,9 @@ resource "kubernetes_manifest" "secret_store" {
   ]
 }
 
-resource "kubernetes_manifest" "external_secrets" {
+resource "kubectl_manifest" "external_secrets" {
   count = local.k8s_enabled ? 1 : 0
-  manifest = {
+  yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1beta1"
     kind       = "ExternalSecret"
     metadata = {
@@ -1051,10 +1104,10 @@ resource "kubernetes_manifest" "external_secrets" {
         },
       ]
     }
-  }
+  })
 
   depends_on = [
-    kubernetes_manifest.secret_store,
+    kubectl_manifest.secret_store,
     helm_release.external_secrets,
   ]
 }

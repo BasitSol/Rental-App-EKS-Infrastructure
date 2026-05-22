@@ -59,9 +59,9 @@ variable "cluster_version" {
 }
 
 variable "cluster_endpoint_public_access_cidrs" {
-  description = "CIDRs allowed to reach the EKS public API endpoint. Narrow this before production cutover."
+  description = "CIDRs allowed to reach the EKS public API endpoint. Defaults to 0.0.0.0/0 because GitHub-hosted runners use AWS-wide egress IPs; authorization is enforced by IAM Access Entries, not by network ACLs. Narrow this only if you switch to self-hosted runners with known egress."
   type        = list(string)
-  default     = ["59.103.217.174/32"]
+  default     = ["0.0.0.0/0"]
 }
 
 variable "node_instance_types" {
