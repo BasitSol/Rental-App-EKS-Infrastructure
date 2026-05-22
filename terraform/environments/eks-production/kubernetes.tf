@@ -300,6 +300,9 @@ resource "kubernetes_deployment" "api" {
         }
 
         security_context {
+          run_as_non_root = true
+          run_as_user     = 10001
+          fs_group        = 10001
           seccomp_profile {
             type = "RuntimeDefault"
           }
@@ -466,6 +469,9 @@ resource "kubernetes_deployment" "client" {
         }
 
         security_context {
+          run_as_non_root = true
+          run_as_user     = 101
+          fs_group        = 101
           seccomp_profile {
             type = "RuntimeDefault"
           }
@@ -1045,7 +1051,7 @@ resource "kubectl_manifest" "cluster_issuer" {
 resource "kubectl_manifest" "secret_store" {
   count = local.k8s_enabled ? 1 : 0
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = "SecretStore"
     metadata = {
       name      = "rental-aws-secrets"
@@ -1077,7 +1083,7 @@ resource "kubectl_manifest" "secret_store" {
 resource "kubectl_manifest" "external_secrets" {
   count = local.k8s_enabled ? 1 : 0
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = "ExternalSecret"
     metadata = {
       name      = "rental-api-secrets"
