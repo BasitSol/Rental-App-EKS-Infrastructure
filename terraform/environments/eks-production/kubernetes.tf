@@ -72,19 +72,29 @@ resource "helm_release" "ingress_nginx" {
   chart            = "ingress-nginx"
   namespace        = "ingress-nginx"
   create_namespace = true
-  atomic           = true
-  cleanup_on_fail  = true
+  atomic           = false
+  cleanup_on_fail  = false
   wait             = true
-  timeout          = 600
+  timeout          = 1200
 
   set {
     name  = "controller.replicaCount"
-    value = "2"
+    value = "1"
   }
 
   set {
     name  = "controller.service.type"
     value = "LoadBalancer"
+  }
+
+  set {
+    name  = "controller.resources.requests.cpu"
+    value = "50m"
+  }
+
+  set {
+    name  = "controller.resources.requests.memory"
+    value = "90Mi"
   }
 }
 
@@ -98,7 +108,7 @@ resource "helm_release" "cert_manager" {
   atomic           = true
   cleanup_on_fail  = true
   wait             = true
-  timeout          = 600
+  timeout          = 1200
 
   set {
     name  = "crds.enabled"
@@ -115,7 +125,7 @@ resource "helm_release" "metrics_server" {
   atomic          = true
   cleanup_on_fail = true
   wait            = true
-  timeout         = 600
+  timeout         = 1200
 
   set {
     name  = "args[0]"
@@ -133,7 +143,7 @@ resource "helm_release" "external_secrets" {
   atomic           = true
   cleanup_on_fail  = true
   wait             = true
-  timeout          = 600
+  timeout          = 1200
 
   set {
     name  = "installCRDs"
@@ -249,7 +259,7 @@ resource "kubernetes_deployment" "api" {
   }
 
   spec {
-    replicas               = 3
+    replicas               = 2
     revision_history_limit = 5
 
     strategy {
@@ -415,7 +425,7 @@ resource "kubernetes_deployment" "client" {
   }
 
   spec {
-    replicas               = 3
+    replicas               = 2
     revision_history_limit = 5
 
     strategy {

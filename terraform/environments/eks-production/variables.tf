@@ -71,21 +71,21 @@ variable "node_instance_types" {
 }
 
 variable "node_min_size" {
-  description = "Minimum node count for the managed node group. t3.micro nodes hold ~4 pods each; bumped to 3 so EKS system pods + the rental workloads fit."
+  description = "Minimum node count. t3.micro holds 4 pods each; daemonsets (aws-node + kube-proxy) eat 2 per node, so net 2 usable slots per node. 8 nodes = 16 usable slots, fits the full stack."
   type        = number
-  default     = 3
+  default     = 8
 }
 
 variable "node_max_size" {
   description = "Maximum node count for the managed node group."
   type        = number
-  default     = 5
+  default     = 10
 }
 
 variable "node_desired_size" {
   description = "Desired node count for the managed node group."
   type        = number
-  default     = 3
+  default     = 8
 }
 
 variable "node_disk_size" {
