@@ -1,18 +1,24 @@
-# Kubernetes Layout (Production-Oriented)
+# Kubernetes Layout
 
-This folder now uses Kustomize with a base + overlays pattern.
+## Production source of truth
+
+In EKS production, Kubernetes resources are managed by Terraform's Kubernetes and Helm providers in [terraform/environments/eks-production/kubernetes.tf](../terraform/environments/eks-production/kubernetes.tf). The CI/CD pipeline at [.github/workflows/deploy.yml](../.github/workflows/deploy.yml) runs `terraform apply` on every push to `main`, so the namespace, RBAC, deployments, services, HPA, PDBs, ingress, network policies, External Secrets, and the platform Helm releases (`ingress-nginx`, `cert-manager`, `metrics-server`, `external-secrets`) all come from Terraform.
+
+The Kustomize layout in this folder is retained for two reasons:
+
+1. **Local Minikube development** uses [overlays/minikube](overlays/minikube) with an in-cluster MongoDB.
+2. **Manual fallback for break-glass** uses [overlays/eks-production](overlays/eks-production) and [run-eks.sh](run-eks.sh) when CI is unavailable. This path may drift from Terraform-managed state and should not be used routinely.
 
 ## Structure
 
 - `base/`: Common, environment-agnostic resources.
 - `overlays/minikube/`: Local Minikube deployment (includes MongoDB in-cluster).
-- `overlays/production/`: Production deployment (expects managed external MongoDB).
+- `overlays/eks-production/`: Manual-fallback overlay for the EKS environment. Image digests, ingress hostname, and IRSA role ARN are placeholders because Terraform owns those values in production. Replace them with real values only if you are using this path as a one-off break-glass deploy.
 
-## Why this is better than a single giant YAML
+## Why this layout
 
 - Separation of concerns: common resources stay in one place.
 - Environment safety: local and production settings are explicitly isolated.
-- Better CI/CD ergonomics: deploy with one command per environment.
 - Easier reviews: smaller files by concern (ingress, deployment, scaling, etc.).
 
 ## Minikube deploy
@@ -71,31 +77,11 @@ echo "$(minikube ip) rental.local" | sudo tee -a /etc/hosts
 kubectl apply -k k8s/overlays/minikube
 ```
 
-## Production deploy
+## EKS production deploy
 
-1. Copy secret example and fill real values (or inject from CI):
+Do this through CI. Push to `main` (or run the workflow manually) and the GitHub Actions pipeline will run `terraform apply` and verify the rollout. See the root [README](../README.md) for the full pipeline description.
 
-```bash
-cp k8s/overlays/production/secrets.env.example k8s/overlays/production/secrets.env
-```
-
-2. Create TLS certificate secret:
-
-```bash
-kubectl -n rental create secret tls rental-tls \
-  --cert=/path/to/fullchain.pem \
-  --key=/path/to/privkey.pem
-```
-
-3. Deploy:
-
-```bash
-kubectl apply -k k8s/overlays/production
-```
-
-## EKS migration deploy
-
-Use this path once the EKS Terraform environment exists and the cluster is reachable:
+If you must apply locally as break-glass, run from a workstation that already has cluster-admin access via Access Entries:
 
 ```bash
 cd terraform/environments/eks-production
@@ -103,13 +89,7 @@ terraform init
 terraform apply
 ```
 
-Then install the cluster add-ons and deploy the application:
-
-```bash
-../../../k8s/run-eks.sh
-```
-
-The EKS path uses AWS Secrets Manager to hydrate the application secret file at deploy time, then reuses the Kubernetes production overlay with the `letsencrypt-prod` ClusterIssuer and the NGINX ingress class. Keep the existing ECS stack running until the EKS rollout is healthy.
+The Kustomize fallback in [run-eks.sh](run-eks.sh) is for local debugging only. Before using it, replace the placeholder image digests, ingress hostname, and IRSA role ARN in [overlays/eks-production](overlays/eks-production) with real values, otherwise the apply will fail or drift from Terraform-managed state.
 
 ## Notes
 
