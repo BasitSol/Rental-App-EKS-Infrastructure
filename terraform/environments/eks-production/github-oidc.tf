@@ -89,6 +89,9 @@ data "aws_iam_policy_document" "github_actions_deploy" {
       "eks:ListAccessPolicies",
       "eks:ListAssociatedAccessPolicies",
       "eks:ListAccessEntries",
+      "eks:DescribeUpdate",
+      "eks:ListUpdates",
+      "eks:UpdateAccessEntry",
     ]
     resources = ["*"]
   }
@@ -128,6 +131,10 @@ data "aws_iam_policy_document" "github_actions_deploy" {
       "ec2:*Route*",
       "ec2:*SecurityGroup*",
       "ec2:*Address*",
+      "ec2:*LaunchTemplate*",
+      "ec2:*PlacementGroup*",
+      "ec2:*Volume*",
+      "ec2:*Snapshot*",
       "ec2:Describe*",
       "ec2:CreateTags",
       "ec2:DeleteTags",
@@ -137,6 +144,14 @@ data "aws_iam_policy_document" "github_actions_deploy" {
       "ec2:DeleteNetworkInterface",
       "ec2:AttachNetworkInterface",
       "ec2:DetachNetworkInterface",
+      "ec2:ModifyNetworkInterfaceAttribute",
+      "ec2:RunInstances",
+      "ec2:TerminateInstances",
+      "ec2:StartInstances",
+      "ec2:StopInstances",
+      "ec2:ModifyInstanceAttribute",
+      "ec2:GetConsoleOutput",
+      "ec2:GetConsoleScreenshot",
     ]
     resources = ["*"]
   }
