@@ -211,7 +211,7 @@ variable "github_runner_version" {
 variable "github_runner_instance_type" {
   description = "Instance type for runner hosts."
   type        = string
-  default     = "t3.micro"
+  default     = "t3.medium"
 }
 
 variable "github_runner_min_size" {
