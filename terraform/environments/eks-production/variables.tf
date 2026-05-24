@@ -133,7 +133,7 @@ variable "external_secrets_service_account" {
 variable "ingress_host" {
   description = "Ingress host for the EKS environment."
   type        = string
-  default     = "ae3b0296de3e84446aba612ab8ecb1ea-817453542.us-east-1.elb.amazonaws.com"
+  default     = "a1c69de9cf7374113805240ad807a004-1732116197.us-east-1.elb.amazonaws.com"
 }
 
 variable "api_image" {
