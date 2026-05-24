@@ -77,6 +77,36 @@ jobs:
       - name: Terraform init
         run: terraform -chdir=terraform/environments/eks-production init
 
+      - name: Restore scheduled-for-deletion secrets
+        # If a previous `terraform destroy` left the Secrets Manager entries in their
+        # 7-day recovery window, restore them and re-import into Terraform state so
+        # the recreate doesn't fail with "scheduled for deletion".
+        run: |
+          set -euo pipefail
+          declare -A SECRETS=(
+            ["mongodb_uri"]="/rentalapp/eks-prod/mongodb_uri"
+            ["session_secret"]="/rentalapp/eks-prod/session_secret"
+            ["jwt_secret"]="/rentalapp/eks-prod/jwt_secret"
+          )
+          for tf_name in "${!SECRETS[@]}"; do
+            aws_name="${SECRETS[$tf_name]}"
+            deleted_date=$(aws secretsmanager describe-secret \
+              --secret-id "$aws_name" \
+              --region "$AWS_REGION" \
+              --query 'DeletedDate' --output text 2>/dev/null || echo "None")
+            if [ "$deleted_date" != "None" ] && [ -n "$deleted_date" ]; then
+              echo "Restoring scheduled-for-deletion secret: $aws_name (was deleted $deleted_date)"
+              aws secretsmanager restore-secret --secret-id "$aws_name" --region "$AWS_REGION"
+              arn=$(aws secretsmanager describe-secret --secret-id "$aws_name" --region "$AWS_REGION" --query ARN --output text)
+              # Import only if not already in state
+              if ! terraform -chdir=terraform/environments/eks-production state list \
+                  | grep -qx "module.app_secrets.aws_secretsmanager_secret.${tf_name}"; then
+                terraform -chdir=terraform/environments/eks-production import \
+                  "module.app_secrets.aws_secretsmanager_secret.${tf_name}" "$arn"
+              fi
+            fi
+          done
+
       - name: Terraform plan
         id: plan
         env:
