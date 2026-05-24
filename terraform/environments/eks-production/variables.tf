@@ -131,9 +131,9 @@ variable "external_secrets_service_account" {
 }
 
 variable "ingress_host" {
-  description = "Ingress host for the EKS environment."
+  description = "Optional custom hostname for the ingress (e.g. app.yourdomain.com). Leave empty to auto-discover the NLB hostname assigned by AWS - the ingress will then act as catch-all for the NLB. Set this when you have a real domain CNAME'd to the NLB."
   type        = string
-  default     = "a1c69de9cf7374113805240ad807a004-1732116197.us-east-1.elb.amazonaws.com"
+  default     = ""
 }
 
 variable "api_image" {

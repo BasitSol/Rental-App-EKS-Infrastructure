@@ -73,3 +73,8 @@ output "github_actions_role_arn" {
   description = "IAM role ARN for GitHub Actions OIDC."
   value       = aws_iam_role.github_actions.arn
 }
+
+output "app_url" {
+  description = "Public URL of the deployed app (auto-discovered NLB hostname or the configured custom domain)."
+  value       = local.app_hostname != "" ? "http://${local.app_hostname}" : "(pending - run terraform apply with enable_k8s_resources=true)"
+}

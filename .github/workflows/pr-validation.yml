@@ -1,0 +1,110 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - 'api-staging/**'
+      - 'client-staging/**'
+      - '.github/workflows/**'
+
+env:
+  AWS_REGION: us-east-1
+  TF_VAR_enable_k8s_resources: "true"
+
+jobs:
+  validate:
+    name: Lint, Validate & Plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      - name: Terraform fmt check
+        id: fmt
+        run: terraform -chdir=terraform/environments/eks-production fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform init
+        id: init
+        run: terraform -chdir=terraform/environments/eks-production init -backend=true
+
+      - name: Terraform validate
+        id: validate
+        run: terraform -chdir=terraform/environments/eks-production validate -no-color
+
+      - name: Terraform plan
+        id: plan
+        env:
+          TF_VAR_mongodb_uri: ${{ secrets.MONGODB_URI }}
+          TF_VAR_session_secret: ${{ secrets.SESSION_SECRET }}
+          TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+        run: |
+          terraform -chdir=terraform/environments/eks-production plan -no-color -input=false 2>&1 | tee plan_output.txt
+          echo "PLAN_EXIT=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
+        continue-on-error: true
+
+      - name: Comment plan on PR
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+            const planOutput = fs.existsSync('plan_output.txt')
+              ? fs.readFileSync('plan_output.txt', 'utf8').slice(-60000)
+              : '(plan not produced)';
+
+            const fmtIcon = '${{ steps.fmt.outcome }}' === 'success' ? '✅' : '❌';
+            const initIcon = '${{ steps.init.outcome }}' === 'success' ? '✅' : '❌';
+            const validateIcon = '${{ steps.validate.outcome }}' === 'success' ? '✅' : '❌';
+            const planIcon = process.env.PLAN_EXIT === '0' ? '✅' : '❌';
+
+            const body = `### Terraform PR Validation
+
+            | Check | Result |
+            |---|---|
+            | Format | ${fmtIcon} |
+            | Init | ${initIcon} |
+            | Validate | ${validateIcon} |
+            | Plan | ${planIcon} |
+
+            <details><summary>Show Plan</summary>
+
+            \`\`\`hcl
+            ${planOutput}
+            \`\`\`
+
+            </details>
+
+            *Pushed by @${{ github.actor }}, commit ${{ github.event.pull_request.head.sha }}*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
+
+      - name: Fail if plan errored
+        if: env.PLAN_EXIT != '0'
+        run: |
+          echo "Terraform plan failed with exit code $PLAN_EXIT"
+          exit 1

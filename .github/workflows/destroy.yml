@@ -1,0 +1,77 @@
+name: Destroy EKS
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type DESTROY (uppercase) to confirm teardown of the EKS environment'
+        required: true
+        type: string
+      skip_k8s:
+        description: 'Skip K8s resource destruction (use only if cluster is already gone)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  destroy:
+    name: Terraform Destroy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Verify confirmation
+        if: inputs.confirm != 'DESTROY'
+        run: |
+          echo "::error::Confirmation phrase must be exactly 'DESTROY'. Got: '${{ inputs.confirm }}'"
+          exit 1
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      - name: Terraform init
+        run: terraform -chdir=terraform/environments/eks-production init
+
+      - name: Pre-destroy K8s cleanup
+        if: ${{ !inputs.skip_k8s }}
+        continue-on-error: true
+        run: |
+          aws eks update-kubeconfig --name rentalapp-eks-prod-eks --region $AWS_REGION || true
+          # Best-effort: delete LoadBalancer services so AWS reaps the NLB before VPC destroy
+          kubectl delete svc -n ingress-nginx ingress-nginx-controller --ignore-not-found --wait=true --timeout=180s || true
+          # Drain helm releases so finalizers don't block VPC/SG cleanup
+          helm uninstall ingress-nginx -n ingress-nginx --wait --timeout 5m || true
+          helm uninstall cert-manager -n cert-manager --wait --timeout 5m || true
+
+      - name: Terraform destroy
+        env:
+          TF_VAR_enable_k8s_resources: ${{ inputs.skip_k8s && 'false' || 'true' }}
+          TF_VAR_mongodb_uri: ${{ secrets.MONGODB_URI }}
+          TF_VAR_session_secret: ${{ secrets.SESSION_SECRET }}
+          TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+        run: terraform -chdir=terraform/environments/eks-production destroy -auto-approve
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Destroy Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Triggered by:** @${{ github.actor }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Skipped K8s pre-cleanup:** ${{ inputs.skip_k8s }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Status:** ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"

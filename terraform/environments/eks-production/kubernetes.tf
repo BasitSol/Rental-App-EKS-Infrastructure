@@ -65,6 +65,26 @@ provider "kubectl" {
   }
 }
 
+data "kubernetes_service" "ingress_nginx_controller" {
+  count = local.k8s_enabled ? 1 : 0
+  metadata {
+    name      = "ingress-nginx-controller"
+    namespace = "ingress-nginx"
+  }
+  depends_on = [helm_release.ingress_nginx]
+}
+
+locals {
+  nlb_hostname = local.k8s_enabled ? try(
+    data.kubernetes_service.ingress_nginx_controller[0].status[0].load_balancer[0].ingress[0].hostname,
+    ""
+  ) : ""
+
+  # app_hostname picks the explicit override if set, otherwise the auto-discovered NLB hostname.
+  # Used by ConfigMap CLIENT_URL so the API knows its public address without manual edits.
+  app_hostname = var.ingress_host != "" ? var.ingress_host : local.nlb_hostname
+}
+
 resource "helm_release" "ingress_nginx" {
   count            = local.k8s_enabled ? 1 : 0
   name             = "ingress-nginx"
@@ -242,7 +262,7 @@ resource "kubernetes_config_map" "rental_api_config" {
     NODE_ENV                = "production"
     PORT                    = "4000"
     SESSION_MAX_AGE_MS      = "86400000"
-    CLIENT_URL              = "http://${var.ingress_host}"
+    CLIENT_URL              = "http://${local.app_hostname}"
     SESSION_COOKIE_SECURE   = "false"
     SESSION_COOKIE_SAME_SITE = "lax"
   }
@@ -735,7 +755,9 @@ resource "kubernetes_ingress_v1" "rental" {
     ingress_class_name = "nginx"
 
     rule {
-      host = var.ingress_host
+      # Host omitted intentionally: serves on whatever NLB hostname AWS assigns
+      # (or any custom domain CNAME'd to it). Set var.ingress_host to lock to a specific host.
+      host = var.ingress_host != "" ? var.ingress_host : null
       http {
         path {
           path      = "/healthz"
