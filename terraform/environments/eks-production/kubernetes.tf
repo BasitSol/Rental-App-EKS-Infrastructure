@@ -674,6 +674,7 @@ resource "kubernetes_horizontal_pod_autoscaler_v2" "api" {
 
       scale_down {
         stabilization_window_seconds = 300
+        select_policy                = "Max"
         policy {
           type           = "Percent"
           value          = 50
