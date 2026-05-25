@@ -160,8 +160,19 @@ jobs:
               for ns in rental ingress-nginx cert-manager external-secrets; do
                 if kubectl get namespace "$ns" >/dev/null 2>&1; then
                   echo "Deleting orphaned namespace: $ns"
-                  kubectl delete namespace "$ns" --wait=false 2>/dev/null || true
+                  kubectl delete namespace "$ns" --ignore-not-found 2>/dev/null || true
                 fi
+              done
+
+              echo "Waiting for namespaces to finish terminating..."
+              for ns in rental ingress-nginx cert-manager external-secrets; do
+                for i in $(seq 1 60); do
+                  if ! kubectl get namespace "$ns" >/dev/null 2>&1; then
+                    break
+                  fi
+                  echo "  $ns still terminating... ($i/60)"
+                  sleep 5
+                done
               done
             fi
           }
@@ -219,10 +230,23 @@ jobs:
             if kubectl get namespace "$ns" >/dev/null 2>&1; then
               if ! terraform state list 2>/dev/null | grep -q "kubernetes_namespace.${ns//-/_}"; then
                 echo "Orphaned namespace found: $ns (not in Terraform state) — deleting"
-                kubectl delete namespace "$ns" --wait=false 2>/dev/null || true
+                kubectl delete namespace "$ns" --ignore-not-found 2>/dev/null || true
               fi
             fi
           done
+
+          # Wait for any terminating namespaces to fully disappear
+          echo "Waiting for namespaces to finish terminating..."
+          for ns in rental ingress-nginx cert-manager external-secrets; do
+            for i in $(seq 1 60); do
+              if ! kubectl get namespace "$ns" >/dev/null 2>&1; then
+                break
+              fi
+              echo "  $ns still terminating... ($i/60)"
+              sleep 5
+            done
+          done
+          echo "Namespace cleanup complete"
 
       - name: Terraform plan
         id: plan
