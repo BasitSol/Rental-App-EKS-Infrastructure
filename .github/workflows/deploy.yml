@@ -182,6 +182,48 @@ jobs:
             echo "EKS cluster reachable and authenticated — K8s state is valid"
           fi
 
+      - name: Clean orphaned Helm releases not in Terraform state
+        # If a previous run dropped state but failed before cleaning cluster resources,
+        # Terraform will try to create releases that already exist → "name already in use".
+        # This step detects and removes them.
+        continue-on-error: true
+        run: |
+          set +e
+          cd terraform/environments/eks-production
+
+          # Skip if cluster is unreachable
+          aws eks update-kubeconfig --name rentalapp-eks-prod-eks --region "$AWS_REGION" >/dev/null 2>&1 || exit 0
+          kubectl cluster-info >/dev/null 2>&1 || exit 0
+
+          declare -A RELEASES=(
+            ["ingress-nginx"]="ingress-nginx"
+            ["cert-manager"]="cert-manager"
+            ["metrics-server"]="kube-system"
+            ["external-secrets"]="external-secrets"
+          )
+
+          for release in "${!RELEASES[@]}"; do
+            ns="${RELEASES[$release]}"
+            # Check if the release exists in the cluster
+            if helm status "$release" -n "$ns" >/dev/null 2>&1; then
+              # Check if it's tracked in Terraform state
+              if ! terraform state list 2>/dev/null | grep -q "helm_release.${release//-/_}"; then
+                echo "Orphaned release found: $release in $ns (not in Terraform state) — uninstalling"
+                helm uninstall "$release" -n "$ns" --wait 2>/dev/null || true
+              fi
+            fi
+          done
+
+          # Also clean orphaned namespaces not in state
+          for ns in rental ingress-nginx cert-manager external-secrets; do
+            if kubectl get namespace "$ns" >/dev/null 2>&1; then
+              if ! terraform state list 2>/dev/null | grep -q "kubernetes_namespace.${ns//-/_}"; then
+                echo "Orphaned namespace found: $ns (not in Terraform state) — deleting"
+                kubectl delete namespace "$ns" --wait=false 2>/dev/null || true
+              fi
+            fi
+          done
+
       - name: Terraform plan
         id: plan
         env:
