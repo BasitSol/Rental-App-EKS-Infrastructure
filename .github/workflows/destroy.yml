@@ -13,6 +13,10 @@ on:
         default: false
         type: boolean
 
+concurrency:
+  group: eks-deploy
+  cancel-in-progress: false
+
 env:
   AWS_REGION: us-east-1
 
@@ -49,12 +53,17 @@ jobs:
       - name: Terraform init
         run: terraform -chdir=terraform/environments/eks-production init
 
-      - name: Setup kubectl + helm
+      - name: Setup kubectl
         if: ${{ !inputs.skip_k8s }}
-        run: |
-          curl -LO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
-          chmod +x kubectl && sudo mv kubectl /usr/local/bin/
-          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.30.0'
+
+      - name: Setup Helm
+        if: ${{ !inputs.skip_k8s }}
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.15.0'
 
       - name: Pre-destroy K8s cleanup (drain cluster before AWS teardown)
         if: ${{ !inputs.skip_k8s }}

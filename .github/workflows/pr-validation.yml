@@ -32,6 +32,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 21600
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -77,24 +78,26 @@ jobs:
             const validateIcon = '${{ steps.validate.outcome }}' === 'success' ? '✅' : '❌';
             const planIcon = process.env.PLAN_EXIT === '0' ? '✅' : '❌';
 
-            const body = `### Terraform PR Validation
-
-            | Check | Result |
-            |---|---|
-            | Format | ${fmtIcon} |
-            | Init | ${initIcon} |
-            | Validate | ${validateIcon} |
-            | Plan | ${planIcon} |
-
-            <details><summary>Show Plan</summary>
-
-            \`\`\`hcl
-            ${planOutput}
-            \`\`\`
-
-            </details>
-
-            *Pushed by @${{ github.actor }}, commit ${{ github.event.pull_request.head.sha }}*`;
+            const body = [
+              '### Terraform PR Validation',
+              '',
+              '| Check | Result |',
+              '|---|---|',
+              `| Format | ${fmtIcon} |`,
+              `| Init | ${initIcon} |`,
+              `| Validate | ${validateIcon} |`,
+              `| Plan | ${planIcon} |`,
+              '',
+              '<details><summary>Show Plan</summary>',
+              '',
+              '```hcl',
+              planOutput,
+              '```',
+              '',
+              '</details>',
+              '',
+              `*Pushed by @${{ github.actor }}, commit ${{ github.event.pull_request.head.sha }}*`
+            ].join('\n');
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,

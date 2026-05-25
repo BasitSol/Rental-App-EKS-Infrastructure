@@ -12,6 +12,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: eks-deploy
+  cancel-in-progress: false
+
 env:
   AWS_REGION: us-east-1
   ECR_REPO_API: rental/api
