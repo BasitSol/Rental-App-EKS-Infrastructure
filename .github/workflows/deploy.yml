@@ -117,24 +117,58 @@ jobs:
         with:
           version: 'v1.30.0'
 
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.15.0'
+
       - name: Check cluster auth and drop stale K8s state if needed
         # If a previous destroy removed the EKS access entry or the cluster itself,
         # Terraform will fail during `plan` trying to refresh helm_release / kubernetes_
         # resources. We test actual kubectl auth; if it fails we purge those stale state
         # entries (including access entry / access policy) so `plan` treats them as new.
+        # We also clean up orphaned cluster resources so Terraform can recreate them.
         continue-on-error: true
         run: |
           set +e
           cd terraform/environments/eks-production
 
-          # First check: does the cluster exist at all?
-          if ! aws eks describe-cluster --name rentalapp-eks-prod-eks --region "$AWS_REGION" >/dev/null 2>&1; then
-            echo "EKS cluster not found — dropping stale K8s/helm/access entry resources from Terraform state"
+          # Helper: drop state entries and clean up corresponding cluster resources
+          cleanup_k8s_resources() {
+            echo "Dropping stale K8s/helm/access entry resources from Terraform state"
             targets=$(terraform state list 2>/dev/null | grep -E '^(helm_release|kubernetes_|kubectl_manifest|data\.kubernetes_|aws_eks_access_entry|aws_eks_access_policy_association)' || true)
+            dropped=false
             for t in $targets; do
               echo "Removing $t from state"
               terraform state rm "$t" || true
+              dropped=true
             done
+
+            # If we dropped state entries, also remove the actual cluster resources
+            # so Terraform can recreate them without "name already in use" errors.
+            if [ "$dropped" = true ]; then
+              echo "Cleaning up orphaned Helm releases..."
+              for release in ingress-nginx cert-manager metrics-server external-secrets; do
+                if helm status "$release" -n "$(helm list --all-namespaces | awk -v r="$release" '$1==r{print $2}')" >/dev/null 2>&1; then
+                  ns=$(helm list --all-namespaces | awk -v r="$release" '$1==r{print $2}')
+                  echo "Uninstalling orphaned helm release: $release in namespace $ns"
+                  helm uninstall "$release" -n "$ns" --wait 2>/dev/null || true
+                fi
+              done
+
+              echo "Cleaning up orphaned namespaces..."
+              for ns in rental ingress-nginx cert-manager external-secrets; do
+                if kubectl get namespace "$ns" >/dev/null 2>&1; then
+                  echo "Deleting orphaned namespace: $ns"
+                  kubectl delete namespace "$ns" --wait=false 2>/dev/null || true
+                fi
+              done
+            fi
+          }
+
+          # First check: does the cluster exist at all?
+          if ! aws eks describe-cluster --name rentalapp-eks-prod-eks --region "$AWS_REGION" >/dev/null 2>&1; then
+            cleanup_k8s_resources
             exit 0
           fi
 
@@ -143,12 +177,7 @@ jobs:
           aws eks update-kubeconfig --name rentalapp-eks-prod-eks --region "$AWS_REGION" >/dev/null 2>&1
           if ! kubectl cluster-info >/dev/null 2>&1; then
             echo "EKS cluster exists but kubectl auth failed — access entry likely missing."
-            echo "Dropping K8s/helm/access entry resources from Terraform state so they get recreated."
-            targets=$(terraform state list 2>/dev/null | grep -E '^(helm_release|kubernetes_|kubectl_manifest|data\.kubernetes_|aws_eks_access_entry|aws_eks_access_policy_association)' || true)
-            for t in $targets; do
-              echo "Removing $t from state"
-              terraform state rm "$t" || true
-            done
+            cleanup_k8s_resources
           else
             echo "EKS cluster reachable and authenticated — K8s state is valid"
           fi
