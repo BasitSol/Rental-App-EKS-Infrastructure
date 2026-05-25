@@ -112,11 +112,16 @@ jobs:
             fi
           done
 
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.30.0'
+
       - name: Check cluster auth and drop stale K8s state if needed
         # If a previous destroy removed the EKS access entry or the cluster itself,
         # Terraform will fail during `plan` trying to refresh helm_release / kubernetes_
         # resources. We test actual kubectl auth; if it fails we purge those stale state
-        # entries so `plan` treats them as brand-new resources.
+        # entries (including access entry / access policy) so `plan` treats them as new.
         continue-on-error: true
         run: |
           set +e
@@ -124,8 +129,8 @@ jobs:
 
           # First check: does the cluster exist at all?
           if ! aws eks describe-cluster --name rentalapp-eks-prod-eks --region "$AWS_REGION" >/dev/null 2>&1; then
-            echo "EKS cluster not found — dropping stale K8s/helm resources from Terraform state"
-            targets=$(terraform state list 2>/dev/null | grep -E '^(helm_release|kubernetes_|kubectl_manifest|data\.kubernetes_)' || true)
+            echo "EKS cluster not found — dropping stale K8s/helm/access entry resources from Terraform state"
+            targets=$(terraform state list 2>/dev/null | grep -E '^(helm_release|kubernetes_|kubectl_manifest|data\.kubernetes_|aws_eks_access_entry|aws_eks_access_policy_association)' || true)
             for t in $targets; do
               echo "Removing $t from state"
               terraform state rm "$t" || true
@@ -138,8 +143,8 @@ jobs:
           aws eks update-kubeconfig --name rentalapp-eks-prod-eks --region "$AWS_REGION" >/dev/null 2>&1
           if ! kubectl cluster-info >/dev/null 2>&1; then
             echo "EKS cluster exists but kubectl auth failed — access entry likely missing."
-            echo "Dropping K8s/helm resources from Terraform state so they get recreated after access entry is restored."
-            targets=$(terraform state list 2>/dev/null | grep -E '^(helm_release|kubernetes_|kubectl_manifest|data\.kubernetes_)' || true)
+            echo "Dropping K8s/helm/access entry resources from Terraform state so they get recreated."
+            targets=$(terraform state list 2>/dev/null | grep -E '^(helm_release|kubernetes_|kubectl_manifest|data\.kubernetes_|aws_eks_access_entry|aws_eks_access_policy_association)' || true)
             for t in $targets; do
               echo "Removing $t from state"
               terraform state rm "$t" || true
@@ -171,12 +176,6 @@ jobs:
           TF_VAR_api_image: ${{ steps.digests.outputs.api_image }}
           TF_VAR_client_image: ${{ steps.digests.outputs.client_image }}
         run: terraform -chdir=terraform/environments/eks-production apply -auto-approve tfplan
-
-      - name: Setup kubectl
-        if: github.event_name == 'push' || inputs.auto_approve
-        uses: azure/setup-kubectl@v3
-        with:
-          version: 'v1.30.0'
 
       - name: Verify deployment
         if: github.event_name == 'push' || inputs.auto_approve
