@@ -87,6 +87,7 @@ locals {
 
 resource "helm_release" "ingress_nginx" {
   count            = local.k8s_enabled ? 1 : 0
+  depends_on       = [aws_eks_access_policy_association.github_actions_admin]
   name             = "ingress-nginx"
   repository       = "https://kubernetes.github.io/ingress-nginx"
   chart            = "ingress-nginx"
@@ -120,6 +121,7 @@ resource "helm_release" "ingress_nginx" {
 
 resource "helm_release" "cert_manager" {
   count            = local.k8s_enabled ? 1 : 0
+  depends_on       = [aws_eks_access_policy_association.github_actions_admin]
   name             = "cert-manager"
   repository       = "https://charts.jetstack.io"
   chart            = "cert-manager"
@@ -138,6 +140,7 @@ resource "helm_release" "cert_manager" {
 
 resource "helm_release" "metrics_server" {
   count           = local.k8s_enabled ? 1 : 0
+  depends_on      = [aws_eks_access_policy_association.github_actions_admin]
   name            = "metrics-server"
   repository      = "https://kubernetes-sigs.github.io/metrics-server/"
   chart           = "metrics-server"
@@ -155,6 +158,7 @@ resource "helm_release" "metrics_server" {
 
 resource "helm_release" "external_secrets" {
   count            = local.k8s_enabled ? 1 : 0
+  depends_on       = [aws_eks_access_policy_association.github_actions_admin]
   name             = "external-secrets"
   repository       = "https://charts.external-secrets.io"
   chart            = "external-secrets"
@@ -172,7 +176,8 @@ resource "helm_release" "external_secrets" {
 }
 
 resource "kubernetes_namespace" "rental" {
-  count = local.k8s_enabled ? 1 : 0
+  count      = local.k8s_enabled ? 1 : 0
+  depends_on = [aws_eks_access_policy_association.github_actions_admin]
   metadata {
     name = "rental"
     labels = {
@@ -1072,7 +1077,8 @@ resource "kubectl_manifest" "cluster_issuer" {
 }
 
 resource "kubectl_manifest" "secret_store" {
-  count = local.k8s_enabled ? 1 : 0
+  count      = local.k8s_enabled ? 1 : 0
+  depends_on = [aws_eks_access_policy_association.github_actions_admin]
   yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1"
     kind       = "SecretStore"
