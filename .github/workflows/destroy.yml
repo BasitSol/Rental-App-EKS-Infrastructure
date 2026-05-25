@@ -113,6 +113,22 @@ jobs:
             terraform state rm "$t" || true
           done
 
+      - name: Drop OIDC provider and IAM role from Terraform state
+        # If terraform destroy deletes the OIDC provider, any later retry of this
+        # workflow will fail with "No OpenIDConnect provider found". By removing these
+        # from state, terraform destroy won't touch them — we clean them up separately
+        # at the end with the already-configured AWS CLI credentials.
+        continue-on-error: true
+        run: |
+          set +e
+          cd terraform/environments/eks-production
+          # OIDC provider
+          terraform state rm 'module.github_runner.aws_iam_openid_connect_provider.github' 2>/dev/null || true
+          terraform state rm 'aws_iam_openid_connect_provider.github' 2>/dev/null || true
+          # IAM role
+          terraform state rm 'module.github_runner.aws_iam_role.github_actions' 2>/dev/null || true
+          terraform state rm 'aws_iam_role.github_actions' 2>/dev/null || true
+
       - name: Terraform destroy
         env:
           TF_VAR_enable_k8s_resources: ${{ inputs.skip_k8s && 'false' || 'true' }}
@@ -120,6 +136,29 @@ jobs:
           TF_VAR_session_secret: ${{ secrets.SESSION_SECRET }}
           TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
         run: terraform -chdir=terraform/environments/eks-production destroy -auto-approve
+
+      - name: Delete OIDC provider and IAM role (post-destroy cleanup)
+        # These were removed from Terraform state above so the destroy wouldn't touch
+        # them. Now clean them up with AWS CLI using the active session.
+        continue-on-error: true
+        run: |
+          set +e
+          echo "Removing GitHub Actions OIDC provider..."
+          aws iam delete-open-id-connect-provider \
+            --open-id-connect-provider-arn "arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):oidc-provider/token.actions.githubusercontent.com" 2>/dev/null || true
+
+          echo "Removing GitHub Actions IAM role..."
+          # Detach policies first
+          for policy in $(aws iam list-attached-role-policies --role-name rentalapp-gha-deploy --query 'AttachedPolicies[].PolicyArn' --output text 2>/dev/null); do
+            aws iam detach-role-policy --role-name rentalapp-gha-deploy --policy-arn "$policy" 2>/dev/null || true
+          done
+          # Delete inline policies
+          for policy in $(aws iam list-role-policies --role-name rentalapp-gha-deploy --query 'PolicyNames' --output text 2>/dev/null); do
+            aws iam delete-role-policy --role-name rentalapp-gha-deploy --policy-name "$policy" 2>/dev/null || true
+          done
+          # Delete role
+          aws iam delete-role --role-name rentalapp-gha-deploy 2>/dev/null || true
+          echo "Cleanup complete"
 
       - name: Summary
         if: always()
