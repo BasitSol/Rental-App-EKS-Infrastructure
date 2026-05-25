@@ -32,8 +32,9 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
 }
 
 resource "aws_iam_role" "github_actions" {
-  name               = var.github_actions_role_name
-  assume_role_policy = data.aws_iam_policy_document.github_actions_assume_role.json
+  name                 = var.github_actions_role_name
+  assume_role_policy   = data.aws_iam_policy_document.github_actions_assume_role.json
+  max_session_duration = 21600 # 6 hours - covers long destroy runs
 }
 
 data "aws_iam_policy_document" "github_actions_deploy" {

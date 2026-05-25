@@ -39,6 +39,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 21600 # 6 hours - destroy can take a while
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -48,16 +49,60 @@ jobs:
       - name: Terraform init
         run: terraform -chdir=terraform/environments/eks-production init
 
-      - name: Pre-destroy K8s cleanup
+      - name: Setup kubectl + helm
+        if: ${{ !inputs.skip_k8s }}
+        run: |
+          curl -LO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
+          chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Pre-destroy K8s cleanup (drain cluster before AWS teardown)
         if: ${{ !inputs.skip_k8s }}
         continue-on-error: true
         run: |
-          aws eks update-kubeconfig --name rentalapp-eks-prod-eks --region $AWS_REGION || true
-          # Best-effort: delete LoadBalancer services so AWS reaps the NLB before VPC destroy
-          kubectl delete svc -n ingress-nginx ingress-nginx-controller --ignore-not-found --wait=true --timeout=180s || true
-          # Drain helm releases so finalizers don't block VPC/SG cleanup
-          helm uninstall ingress-nginx -n ingress-nginx --wait --timeout 5m || true
-          helm uninstall cert-manager -n cert-manager --wait --timeout 5m || true
+          set +e
+          # Try to reach the cluster. If it's already gone, skip everything.
+          if ! aws eks update-kubeconfig --name rentalapp-eks-prod-eks --region $AWS_REGION; then
+            echo "Cluster not reachable - skipping K8s pre-cleanup"
+            exit 0
+          fi
+
+          # 1. Delete the rental namespace (deployments, services, ingress, HPAs, ESO CRDs all go away).
+          #    --wait=false because finalizers may stall; we'll force later if needed.
+          kubectl delete namespace rental --ignore-not-found --wait=false
+
+          # 2. Delete the ingress-nginx LoadBalancer Service explicitly so AWS reaps the NLB cleanly
+          #    before VPC destroy starts (otherwise VPC delete stalls on dangling ENIs).
+          kubectl delete svc -n ingress-nginx ingress-nginx-controller --ignore-not-found --wait=true --timeout=300s
+
+          # 3. Uninstall all helm releases. Each --wait blocks until release is fully gone.
+          for r in ingress-nginx cert-manager external-secrets metrics-server; do
+            ns=$r
+            [ "$r" = "metrics-server" ] && ns=kube-system
+            helm uninstall "$r" -n "$ns" --wait --timeout 5m || true
+          done
+
+          # 4. Force-delete the rental namespace if finalizers stalled it.
+          kubectl delete namespace rental --ignore-not-found --wait=true --timeout=120s --force --grace-period=0 || true
+
+          # 5. Wait briefly for AWS to reap the NLB ENIs.
+          sleep 30
+
+      - name: Drop K8s/helm resources from Terraform state
+        # With the cluster drained above, the K8s/helm resources no longer exist there.
+        # Removing them from state means `terraform destroy` won't try to talk to the
+        # (possibly already-deleted) cluster API, avoiding the "forbidden" race.
+        if: ${{ !inputs.skip_k8s }}
+        continue-on-error: true
+        run: |
+          set +e
+          cd terraform/environments/eks-production
+          # All resources that touch the cluster API:
+          targets=$(terraform state list 2>/dev/null | grep -E '^(helm_release|kubernetes_|kubectl_manifest|data\.kubernetes_)' || true)
+          for t in $targets; do
+            echo "Removing $t from state"
+            terraform state rm "$t" || true
+          done
 
       - name: Terraform destroy
         env:
