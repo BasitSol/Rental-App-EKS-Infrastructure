@@ -112,16 +112,17 @@ jobs:
             fi
           done
 
-      - name: Check cluster health and drop stale K8s state if needed
-        # If a previous destroy deleted the EKS cluster but left K8s/helm entries in
-        # Terraform state, `terraform plan` will fail trying to refresh them against a
-        # non-existent cluster. This step detects that and removes the stale state.
+      - name: Check cluster auth and drop stale K8s state if needed
+        # If a previous destroy removed the EKS access entry or the cluster itself,
+        # Terraform will fail during `plan` trying to refresh helm_release / kubernetes_
+        # resources. We test actual kubectl auth; if it fails we purge those stale state
+        # entries so `plan` treats them as brand-new resources.
         continue-on-error: true
         run: |
           set +e
           cd terraform/environments/eks-production
 
-          # Try to describe the cluster. If it doesn't exist, we know K8s state is stale.
+          # First check: does the cluster exist at all?
           if ! aws eks describe-cluster --name rentalapp-eks-prod-eks --region "$AWS_REGION" >/dev/null 2>&1; then
             echo "EKS cluster not found — dropping stale K8s/helm resources from Terraform state"
             targets=$(terraform state list 2>/dev/null | grep -E '^(helm_release|kubernetes_|kubectl_manifest|data\.kubernetes_)' || true)
@@ -129,8 +130,22 @@ jobs:
               echo "Removing $t from state"
               terraform state rm "$t" || true
             done
+            exit 0
+          fi
+
+          # Second check: can we actually authenticate to it?
+          # (The access entry may have been destroyed even though the cluster still exists.)
+          aws eks update-kubeconfig --name rentalapp-eks-prod-eks --region "$AWS_REGION" >/dev/null 2>&1
+          if ! kubectl cluster-info >/dev/null 2>&1; then
+            echo "EKS cluster exists but kubectl auth failed — access entry likely missing."
+            echo "Dropping K8s/helm resources from Terraform state so they get recreated after access entry is restored."
+            targets=$(terraform state list 2>/dev/null | grep -E '^(helm_release|kubernetes_|kubectl_manifest|data\.kubernetes_)' || true)
+            for t in $targets; do
+              echo "Removing $t from state"
+              terraform state rm "$t" || true
+            done
           else
-            echo "EKS cluster is reachable — K8s state is valid"
+            echo "EKS cluster reachable and authenticated — K8s state is valid"
           fi
 
       - name: Terraform plan
