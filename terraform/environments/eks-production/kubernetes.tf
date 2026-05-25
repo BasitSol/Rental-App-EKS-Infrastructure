@@ -1077,8 +1077,12 @@ resource "kubectl_manifest" "cluster_issuer" {
 }
 
 resource "kubectl_manifest" "secret_store" {
-  count      = local.k8s_enabled ? 1 : 0
-  depends_on = [aws_eks_access_policy_association.github_actions_admin]
+  count = local.k8s_enabled ? 1 : 0
+  depends_on = [
+    aws_eks_access_policy_association.github_actions_admin,
+    helm_release.external_secrets,
+    kubernetes_service_account.external_secrets,
+  ]
   yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1"
     kind       = "SecretStore"
@@ -1102,11 +1106,6 @@ resource "kubectl_manifest" "secret_store" {
       }
     }
   })
-
-  depends_on = [
-    helm_release.external_secrets,
-    kubernetes_service_account.external_secrets,
-  ]
 }
 
 resource "kubectl_manifest" "external_secrets" {
