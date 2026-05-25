@@ -194,6 +194,7 @@ data "aws_iam_policy_document" "github_actions_deploy" {
       "iam:ListOpenIDConnectProviders",
       "iam:TagOpenIDConnectProvider",
       "iam:UntagOpenIDConnectProvider",
+      "iam:UpdateOpenIDConnectProviderThumbprint",
       "iam:UpdateAssumeRolePolicy",
       "iam:PassRole",
       "iam:TagPolicy",
